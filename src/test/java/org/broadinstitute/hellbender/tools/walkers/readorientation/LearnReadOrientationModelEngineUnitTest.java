@@ -105,20 +105,21 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
 
 
         final List<AltSiteRecord> altDesignMatrix = new ArrayList<>();
-        final Histogram<Integer> refSiteHistogram = F1R2FilterUtils.createRefHistogram(refContext);
+        final Histogram<Integer> refSiteHistogram = F1R2FilterUtils.createRefHistogram(refContext, F1R2FilterConstants.DEFAULT_MAX_DEPTH);
 
         IntStream.range(0, numRefExamples).forEach(i -> refSiteHistogram.increment(depth));
         IntStream.range(0, numAltExamples).forEach(i -> altDesignMatrix.add(new AltSiteRecord(refContext, refCount, altCount, refF1R2, altCount, altAllele)));
 
-        LearnReadOrientationModelEngine engine = new LearnReadOrientationModelEngine(refSiteHistogram, Collections.emptyList(), altDesignMatrix,
-                LearnReadOrientationModel.DEFAULT_CONVERGENCE_THRESHOLD, LearnReadOrientationModel.DEFAULT_MAX_ITERATIONS, logger);
-        ArtifactPrior artifactPrior = engine.learnPriorForArtifactStates();
+        final LearnReadOrientationModelEngine engine = new LearnReadOrientationModelEngine(refSiteHistogram, Collections.emptyList(), altDesignMatrix,
+                LearnReadOrientationModel.DEFAULT_CONVERGENCE_THRESHOLD, LearnReadOrientationModel.DEFAULT_MAX_ITERATIONS,
+                F1R2FilterConstants.DEFAULT_MAX_DEPTH, logger);
+        final ArtifactPrior artifactPrior = engine.learnPriorForArtifactStates();
 
         Assert.assertEquals(engine.getEffectiveCounts(artifactState), (double) numAltExamples, EPSILON);
         Assert.assertEquals(engine.getEffectiveCounts(ArtifactState.HOM_REF), (double) numRefExamples, EPSILON);
 
-        Assert.assertEquals(artifactPrior.getPi(artifactState, refContext), (double) numAltExamples/numExamples, EPSILON);
-        Assert.assertEquals(artifactPrior.getPi(ArtifactState.HOM_REF, refContext), (double) numRefExamples/numExamples, EPSILON);
+        Assert.assertEquals(artifactPrior.getPi(artifactState), (double) numAltExamples/numExamples, EPSILON);
+        Assert.assertEquals(artifactPrior.getPi(ArtifactState.HOM_REF), (double) numRefExamples/numExamples, EPSILON);
     }
 
 
@@ -135,14 +136,13 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
         final int numRefExamples = 10_000;
         final int numArtifactExamples = 10;
 
-        final int maxRefDepth = F1R2FilterConstants.maxDepth;
         final int randomSeed = 42;
         final RandomGenerator rdg = RandomGeneratorFactory.createRandomGenerator(new Random(randomSeed));
 
-        final BinomialDistribution refDistribution = new BinomialDistribution(rdg, maxRefDepth, 0.5);
+        final BinomialDistribution refDistribution = new BinomialDistribution(rdg, F1R2FilterConstants.DEFAULT_MAX_DEPTH, 0.5);
 
         final List<AltSiteRecord> altDesignMatrix = new ArrayList<>();
-        final Histogram<Integer> refSiteHistogram = F1R2FilterUtils.createRefHistogram(refContext);
+        final Histogram<Integer> refSiteHistogram = F1R2FilterUtils.createRefHistogram(refContext, F1R2FilterConstants.DEFAULT_MAX_DEPTH);
 
         // Create ref examples
         IntStream.range(0, numRefExamples).forEach(i -> refSiteHistogram.increment(refDistribution.sample()));
@@ -174,7 +174,8 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
         });
 
         final LearnReadOrientationModelEngine engine = new LearnReadOrientationModelEngine(refSiteHistogram, Collections.emptyList(), altDesignMatrix,
-                LearnReadOrientationModel.DEFAULT_CONVERGENCE_THRESHOLD, LearnReadOrientationModel.DEFAULT_MAX_ITERATIONS, logger);
+                LearnReadOrientationModel.DEFAULT_CONVERGENCE_THRESHOLD, LearnReadOrientationModel.DEFAULT_MAX_ITERATIONS,
+                F1R2FilterConstants.DEFAULT_MAX_DEPTH, logger);
         final ArtifactPrior artifactPrior = engine.learnPriorForArtifactStates();
 
         Assert.assertEquals(engine.getEffectiveCounts(ArtifactState.F1R2_T), (double) numArtifactExamples, epsilon);
@@ -182,12 +183,12 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
         Assert.assertEquals(engine.getEffectiveCounts(ArtifactState.SOMATIC_HET), (double) numSomaticHetExamples, epsilon);
 
         final int numExamples = numRefExamples + 2*numArtifactExamples + numSomaticHetExamples;
-        Assert.assertEquals(artifactPrior.getPi(ArtifactState.SOMATIC_HET, refContext), (double) numSomaticHetExamples/numExamples, 1e-3);
-        Assert.assertEquals(MathUtils.sum(artifactPrior.getPi(refContext)), 1.0, 1e-3);
+        Assert.assertEquals(artifactPrior.getPi(ArtifactState.SOMATIC_HET), (double) numSomaticHetExamples/numExamples, 1e-3);
+        Assert.assertEquals(MathUtils.sum(artifactPrior.getPi()), 1.0, 1e-3);
 
         // Make sure ref->ref transitions get 0 probability
         for (ArtifactState state : ArtifactState.getRefToRefArtifacts(refAllele)){
-            Assert.assertEquals(artifactPrior.getPi(state, refContext), 0.0);
+            Assert.assertEquals(artifactPrior.getPi(state), 0.0);
         }
     }
 
@@ -222,7 +223,7 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
             final Nucleotide altAllele = transition.getMiddle();
             final ReadOrientation f1r2 = transition.getRight();
 
-            final Histogram<Integer> refSiteHistogram = F1R2FilterUtils.createRefHistogram(refContext);
+            final Histogram<Integer> refSiteHistogram = F1R2FilterUtils.createRefHistogram(refContext, F1R2FilterConstants.DEFAULT_MAX_DEPTH);
 
             refSiteHistogram.increment(refDepth, numRefExamples);
             refMetricsFile.addHistogram(refSiteHistogram);
@@ -242,13 +243,13 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
         new Main().instanceMain(makeCommandLineArgs(
                 Arrays.asList(
                         "-alt-table", altMatrixOutput.getAbsolutePath(),
-                        "-ref-table", refHistogramOutput.getAbsolutePath(),
+                        "-ref-hist", refHistogramOutput.getAbsolutePath(),
                         "-O", artifactPriorTable.getAbsolutePath()),
                 LearnReadOrientationModel.class.getSimpleName()));
 
-        final List<ArtifactPrior> artifactPriors = ArtifactPrior.readArtifactPriors(artifactPriorTable);
+        final ArtifactPriorCollection artifactPriorCollection = ArtifactPriorCollection.readArtifactPriors(artifactPriorTable);
 
-        Assert.assertEquals(artifactPriors.size(), expectedNumUniqueContexts);
+        Assert.assertEquals(artifactPriorCollection.getNumUniqueContexts(), expectedNumUniqueContexts);
 
         final double expectedRefFraction = (double) numRefExamples/(numArtifactExamples + numRefExamples);
         final double expectedArtifactFraction = (double) numArtifactExamples/(numArtifactExamples + numRefExamples);
@@ -259,9 +260,9 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
             final ReadOrientation f1r2 = transition.getRight();
             final ArtifactState state = f1r2 == ReadOrientation.F1R2 ? ArtifactState.getF1R2StateForAlt(altAllele) :
                     ArtifactState.getF2R1StateForAlt(altAllele);
-            final ArtifactPrior hyp = ArtifactPrior.searchByContext(artifactPriors, refContext).get();
-            Assert.assertEquals(hyp.getPi(state, refContext), expectedArtifactFraction, epsilon);
-            Assert.assertEquals(hyp.getPi(ArtifactState.HOM_REF, refContext), expectedRefFraction, epsilon);
+            final ArtifactPrior artifactPrior = artifactPriorCollection.get(refContext).get();
+            Assert.assertEquals(artifactPrior.getPi(state), expectedArtifactFraction, epsilon);
+            Assert.assertEquals(artifactPrior.getPi(ArtifactState.HOM_REF), expectedRefFraction, epsilon);
         }
     }
 
@@ -278,7 +279,7 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
         final Histogram<Integer> refF1R2AGA = createRefHistograms("AGA", depth2, numExamples2);
 
         final Histogram<Integer> combinedRefAGA = LearnReadOrientationModel.combineRefHistogramWithRC(
-                "AGA", refF1R2AGA, refF1R2TCT);
+                "AGA", refF1R2AGA, refF1R2TCT, F1R2FilterConstants.DEFAULT_MAX_DEPTH);
 
         Assert.assertEquals((int) combinedRefAGA.get(depth1).getValue(), numExamples1);
         Assert.assertEquals((int) combinedRefAGA.get(depth2).getValue(), numExamples2);
@@ -288,11 +289,11 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
         final List<Histogram<Integer>> altTCT = createDepthOneAltHistograms("TCT", depth1, numExamples1);
         final List<Histogram<Integer>> altAGA = createDepthOneAltHistograms("AGA", depth2, numExamples2);
 
-        final List<Histogram<Integer>> combinedDepthOneAGA = LearnReadOrientationModel.combineAltDepthOneHistogramWithRC(altAGA, altTCT);
+        final List<Histogram<Integer>> combinedDepthOneAGA = LearnReadOrientationModel.combineAltDepthOneHistogramWithRC(altAGA, altTCT, F1R2FilterConstants.DEFAULT_MAX_DEPTH);
 
         // Feeding the input the other way should fail
         try {
-            LearnReadOrientationModel.combineAltDepthOneHistogramWithRC(altTCT, altAGA);
+            LearnReadOrientationModel.combineAltDepthOneHistogramWithRC(altTCT, altAGA, F1R2FilterConstants.DEFAULT_MAX_DEPTH);
         } catch (IllegalArgumentException e){
             // Good
         }
@@ -378,7 +379,7 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
     }
 
     private Histogram<Integer> createRefHistograms(final String refContext, final int refDepth, final int numExamples) {
-        final Histogram<Integer> refSiteHistogram = F1R2FilterUtils.createRefHistogram(refContext);
+        final Histogram<Integer> refSiteHistogram = F1R2FilterUtils.createRefHistogram(refContext, F1R2FilterConstants.DEFAULT_MAX_DEPTH);
         refSiteHistogram.increment(refDepth, numExamples);
         return refSiteHistogram;
     }
@@ -389,13 +390,13 @@ public class LearnReadOrientationModelEngineUnitTest extends CommandLineProgramT
      */
     private List<Histogram<Integer>> createDepthOneAltHistograms(final String refContext, final int depth, final int numExamples) {
         final List<Histogram<Integer>> altComputationalHistograms = new ArrayList<>(F1R2FilterConstants.numAltHistogramsPerContext);
-        for (final Nucleotide altAllele : F1R2FilterConstants.REGULAR_BASES){
+        for (final Nucleotide altAllele : Nucleotide.REGULAR_BASES){
             if (altAllele == F1R2FilterUtils.getMiddleBase(refContext)){
                 continue;
             }
 
             for (final ReadOrientation f1r2 : ReadOrientation.values()){
-                final Histogram<Integer> altComputationalHistogram = F1R2FilterUtils.createAltHistogram(refContext, altAllele, f1r2);
+                final Histogram<Integer> altComputationalHistogram = F1R2FilterUtils.createAltHistogram(refContext, altAllele, f1r2, F1R2FilterConstants.DEFAULT_MAX_DEPTH);
                 altComputationalHistogram.increment(depth, numExamples);
                 altComputationalHistograms.add(altComputationalHistogram);
             }

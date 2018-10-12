@@ -51,6 +51,7 @@ repositories {
 
     maven {
         url "https://broadinstitute.jfrog.io/broadinstitute/libs-snapshot/" //for htsjdk snapshots
+        url "https://oss.sonatype.org/content/repositories/snapshots/"
     }
 
     mavenLocal()
@@ -226,7 +227,7 @@ dependencies {
 
     compile 'com.github.broadinstitute:picard:' + picardVersion
     externalSourceConfiguration 'com.github.broadinstitute:picard:' + picardVersion + ':sources'
-    compile ('com.intel:genomicsdb:' + genomicsdbVersion)  {
+    compile ('org.genomicsdb:genomicsdb:1.0.0-20181012.145846-4')  {
         exclude module: 'log4j'
         exclude module: 'spark-core_2.10'
         exclude module: 'htsjdk'
